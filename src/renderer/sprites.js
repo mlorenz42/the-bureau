@@ -56,6 +56,7 @@
     ctx.beginPath();
     ctx.ellipse(0, 12.5, 10, 3.8, 0, 0, Math.PI * 2);
     ctx.fill();
+    if (character.isPlayer) drawPlayerRing(ctx, time);
 
     ctx.translate(0, lift);
     ctx.lineWidth = 1;
@@ -151,6 +152,25 @@
 
     if (character.status) drawStatusLight(ctx, px, figureY(py, -31 + lift), character.status, time);
     if (character.isSubagent) drawBadge(ctx, px + 9 * FIGURE_SCALE, figureY(py, -23 + lift));
+  }
+
+  // "You are here": a glowing green ring on the floor under the alien, gently pulsing
+  function drawPlayerRing(ctx, time) {
+    const pulse = 0.5 + 0.5 * Math.sin(time / 400);
+    ctx.save();
+    const glow = ctx.createRadialGradient(0, 12.5, 2, 0, 12.5, 17);
+    glow.addColorStop(0, `rgba(134,239,172,${0.35 + 0.2 * pulse})`);
+    glow.addColorStop(1, 'rgba(134,239,172,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.ellipse(0, 12.5, 17, 6.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(74,222,128,${0.75 + 0.25 * pulse})`;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.ellipse(0, 12.5, 13 + pulse * 1.5, 4.8 + pulse * 0.6, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   function drawHead(ctx, looks, face, headY) {
@@ -467,6 +487,34 @@
     ctx.restore();
   }
 
+  // The floor of a cubicle nobody sits in right now (agent away, or a spare desk) turns paler,
+  // so empty places stand out from occupied ones. Desk, chair and rug are drawn on top.
+  // The cubicle runs from under its back wall down to the next back wall and from the left
+  // divider to its own; it never leaves the team area.
+  function drawEmptyCubicle(ctx, desk, world) {
+    const top = desk.y - 1; // first row of the cubicle, where the back wall stands
+    let x0 = (desk.x - 1) * TILE + 2;
+    let x1 = (desk.x + 4) * TILE - 2;
+    let y0 = top * TILE + 13;
+    let y1 = (top + 5) * TILE + 6;
+    const area = world.spaceAreas.find(
+      (space) => desk.x >= space.x && desk.x < space.x + space.w && desk.y >= space.y && desk.y < space.y + space.h,
+    );
+    if (area) {
+      // the team carpet is drawn inset from its tiles (see drawSpaceAreas)
+      x0 = Math.max(x0, area.x * TILE + 6);
+      x1 = Math.min(x1, (area.x + area.w) * TILE - 6);
+      y0 = Math.max(y0, area.y * TILE + 10);
+      y1 = Math.min(y1, (area.y + area.h) * TILE - 8);
+    }
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.38)';
+    ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+    ctx.restore();
+    drawChair(ctx, desk.chair, 'seat');
+    drawChair(ctx, desk.chair, 'back');
+  }
+
   // A rug in front of the desk of an agent who is away (on a break, in a meeting, at my door):
   // who sits here and the tab name, so I can click it to call the agent back. It lies on the floor
   // and shrinks with the office like the other rugs.
@@ -541,6 +589,43 @@
     let cut = name;
     while (cut.length > 2 && ctx.measureText(`${cut}…`).width > maxWidth) cut = cut.slice(0, -1);
     return `${cut}…`;
+  }
+
+  // "Me": a green badge with a pointer above the alien's head, always on top and always the same
+  // size on screen, so I can find myself at a glance even when standing next to an agent.
+  function drawPlayerMarker(ctx, character, scale, time) {
+    const px = character.x * TILE + TILE / 2;
+    const tip = figureY(character.y * TILE + TILE / 2, -34) - (2 + Math.sin(time / 350) * 1.5) / scale;
+    const size = 13 / scale;
+    ctx.save();
+    ctx.font = `700 ${size}px -apple-system, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const text = character.name;
+    const width = ctx.measureText(text).width + 14 / scale;
+    const height = size + 8 / scale;
+    const arrow = 5 / scale;
+    const top = tip - arrow - height;
+    ctx.shadowColor = 'rgba(0,0,0,0.35)';
+    ctx.shadowBlur = 4 / scale;
+    ctx.shadowOffsetY = 1 / scale;
+    ctx.fillStyle = '#22c55e';
+    roundRect(ctx, px - width / 2, top, width, height, height / 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(px - arrow, top + height - 0.5 / scale);
+    ctx.lineTo(px, tip);
+    ctx.lineTo(px + arrow, top + height - 0.5 / scale);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = '#f0fdf4';
+    ctx.lineWidth = 1.2 / scale;
+    roundRect(ctx, px - width / 2, top, width, height, height / 2);
+    ctx.stroke();
+    ctx.fillStyle = '#052e16';
+    ctx.fillText(text, px, top + height / 2 + 0.5 / scale);
+    ctx.restore();
   }
 
   function drawBubble(ctx, character, text, scale) {
@@ -1643,5 +1728,7 @@
     drawRoomSigns,
     setLegendCounts,
     drawDeskRug,
+    drawEmptyCubicle,
+    drawPlayerMarker,
   };
 })();

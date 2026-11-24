@@ -201,6 +201,15 @@
     followEnabled = enabled;
   });
 
+  // Tab switches the office itself asks Herdr for (click, standing next to an agent) must not
+  // count as "I opened this tab" for following, or walking past agents bounces between them.
+  let requestedFocusKey = null;
+  function showInHerdr(agent) {
+    if (!agent) return;
+    requestedFocusKey = agent.key;
+    window.Terminals.showAgent(agent);
+  }
+
   function goToOffice() {
     pinnedKey = null;
     player.target = world.bossChair;
@@ -220,12 +229,19 @@
       if (player.target !== world.bossChair) goToOffice();
       return;
     }
+    if (focusChanged && focused && focused.key === requestedFocusKey) {
+      requestedFocusKey = null; // the office asked for this tab itself
+      return;
+    }
     if (waiting || !focusChanged || !focused || keys.size) return;
     const character = characters.get(focused.key);
     if (!character || pinnedKey === focused.key) return;
     pinnedKey = focused.key;
     nearCandidate = { key: focused.key, since: 0, shown: true };
-    const destination = character.target && character.target.seat ? character.target : character;
+    // walk to where the agent is going, not where it is: a new agent spawns at the entrance
+    // and only gets its desk once targets are assigned
+    assignTargets();
+    const destination = character.target || character;
     const goal = spotBeside(destination);
     player.target = goal;
     player.path = findPath(world, player, goal).slice(1);
@@ -461,6 +477,11 @@
       if (pinned && !pinned.leaving && player.path.length) return;
       pinnedKey = null;
     }
+    // walking past agents must not switch tabs: only standing next to one shows it
+    if (player.moving || player.path.length) {
+      nearCandidate = null;
+      return;
+    }
     let nearest = null;
     let nearestDistance = Infinity;
     for (const character of characters.values()) {
@@ -481,7 +502,7 @@
     }
     if (nearCandidate.shown || now - nearCandidate.since < NEAR_DELAY_MS) return;
     nearCandidate.shown = true;
-    window.Terminals.showAgent(consoleAgent(nearest));
+    showInHerdr(consoleAgent(nearest));
   }
 
   function consoleAgent(character) {
@@ -553,6 +574,7 @@
     drawStaticLayer(ratio);
     for (const desk of world.desks) {
       const agent = agentByKey(desk.ownerKey);
+      if (!agent || awayFromDesk(agent)) Sprites.drawEmptyCubicle(ctx, desk, world);
       if (agent && awayFromDesk(agent)) Sprites.drawDeskRug(ctx, desk, agent, loungeSeatByKey.has(agent.key));
     }
     for (const desk of world.desks) Sprites.drawDesk(ctx, desk, agentByKey(desk.ownerKey), now);
@@ -564,10 +586,9 @@
     for (const character of characters.values()) {
       if (character.status === 'idle' && !character.moving) Sprites.drawZzz(ctx, character, now);
     }
-    const standingWithAgent = nearCandidate && nearCandidate.shown;
     const placed = [];
     for (const character of [...drawn].sort((a, b) => Math.round(a.y) - Math.round(b.y) || a.x - b.x)) {
-      if (character === player && standingWithAgent) continue;
+      if (character === player) continue; // the alien gets its marker above the head instead
       Sprites.drawLabel(ctx, character, scale, Boolean(agentByKey(character.key)?.focused), placed);
     }
     for (const [key, bubble] of bubbles) {
@@ -575,6 +596,7 @@
       if (!character || now - bubble.at > BUBBLE_MS) bubbles.delete(key);
       else Sprites.drawBubble(ctx, character, bubble.text, scale);
     }
+    Sprites.drawPlayerMarker(ctx, player, scale, now);
     drawBeams(now);
     drawUfoFlyby(now);
   }
@@ -751,7 +773,7 @@
     character.breakUntil = 0;
     pinnedKey = agent.key;
     nearCandidate = { key: agent.key, since: 0, shown: true };
-    window.Terminals.showAgent(agent);
+    showInHerdr(agent);
     window.Terminals.focusHerdr();
     const goal = spotBeside(desk.chair);
     player.target = goal;
@@ -777,14 +799,14 @@
     }
     if (agent.status === 'blocked') {
       // someone waiting is seen in my office: show the tab and let it come in
-      window.Terminals.showAgent(agent);
+      showInHerdr(agent);
       window.Terminals.focusHerdr();
       goToOffice();
       return;
     }
     pinnedKey = character.key;
     nearCandidate = { key: character.key, since: 0, shown: true };
-    window.Terminals.showAgent(agent);
+    showInHerdr(agent);
     window.Terminals.focusHerdr();
     const goal = spotBeside(character);
     player.target = goal;
