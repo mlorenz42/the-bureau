@@ -6,12 +6,17 @@ left, a shell top right, the office bottom right.
 
 ![The office](assets/screenshot.png)
 
-Each Herdr space is a team area, each agent sits at its desk with its tab name and a status light.
-An agent that needs you walks into your office; the others wait on the chairs outside. While nobody
-waits, you walk over to whichever agent's tab Herdr shows. Finished
-or idle agents take a break in the lounge, subagents are beamed into meeting pods, and agents
-announce "done" or "needs you" out loud. Click an agent, or its empty desk, to jump to its tab in
-Herdr. The shortcuts are on the rugs by the entrance and in the Help menu (⌘/).
+- **Teams:** each Herdr space is a team area; every agent has a cubicle with its name and tab.
+- **Status at a glance:** the cubicle floor is green while the agent works, grey when it is idle,
+  blue when it is done and orange when it needs you.
+- **Needs you:** the agent walks into your office, the others wait on the chairs outside. Agents
+  also say "… is done" or "… needs you" out loud.
+- **Nothing to do:** idle agents drink coffee, read the paper or stretch at their desk, or take a
+  break in the lounge.
+- **Subagents:** a UFO beams them into a meeting pod next to their agent.
+- **You** are the alien: while nobody waits, you walk to whichever agent's tab Herdr shows. Click an
+  agent or its desk to jump to its tab.
+- **Shortcuts:** on the rugs by the entrance and in the Help menu (⌘/).
 
 ## Requirements
 
@@ -49,19 +54,24 @@ Agent Mulder and Agent Scully are always on the team. Replace the other names in
 { "names": ["Ada", "Linus", "Grace"] }
 ```
 
-## Subagent hooks
+## Subagents (optional)
 
-Herdr cannot see subagents. Claude Code can report them through hooks that post to the app; other
-agents show up without their subagents.
+When a Claude Code agent starts subagents, they can show up in the office too. Herdr does not know
+about subagents, so Claude Code has to tell the app itself, through *hooks*: small commands Claude
+Code runs whenever a subagent starts or stops. Other agents simply appear without their subagents.
 
-In the `the-bureau` folder:
+Set the hooks up once, in the `the-bureau` folder:
 
 ```bash
-npm run hooks:install     # into ~/.claude/settings.local.json (sessions started in ~)
-npm run hooks:uninstall
+npm run hooks:install
 ```
 
-For another settings file: `python3 -I scripts/hooks.py install <settings-file>`.
+- They go into `~/.claude/settings.local.json`, which applies to Claude Code sessions started in your
+  home folder. For sessions started in a project folder, add them to that project's settings:
+  `python3 -I scripts/hooks.py install <project>/.claude/settings.local.json`.
+- New sessions pick them up; running sessions after a restart.
+- While The Bureau is not running, the hooks do nothing and do not slow Claude Code down.
+- If you stop using the app, remove them again with `npm run hooks:uninstall`.
 
 ## License
 
