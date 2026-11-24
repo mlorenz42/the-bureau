@@ -45,7 +45,7 @@
       roomMeeting: 'Meeting',
       roomLounge: 'Lounge',
       legendTitle: 'LEGENDE',
-      legend: { working: 'arbeitet', blocked: 'braucht dich', done: 'fertig', idle: 'idle · zzz' },
+      legend: { working: 'arbeitet', blocked: 'braucht dich', done: 'fertig', idle: 'idle · ☕' },
       helpRugs: {
         walk: ['LAUFEN', [[['WASD / Pfeile', 'laufen']], [['Klick', 'hingehen'], ['H', 'Chefbüro']]]],
         agents: ['AGENTEN', [[['Klick / Herangehen', 'in Herdr']], [['Enter', 'tippen'], ['⌘Esc', 'zurück']]]],
@@ -101,7 +101,7 @@
       roomMeeting: 'Meeting',
       roomLounge: 'Lounge',
       legendTitle: 'LEGEND',
-      legend: { working: 'working', blocked: 'needs you', done: 'done', idle: 'idle · zzz' },
+      legend: { working: 'working', blocked: 'needs you', done: 'done', idle: 'idle · ☕' },
       helpRugs: {
         walk: ['WALK', [[['WASD / arrows', 'walk']], [['Click', 'go there'], ['H', 'my office']]]],
         agents: ['AGENTS', [[['Click / walk up', 'show in Herdr']], [['Enter', 'type'], ['⌘Esc', 'back']]]],

@@ -564,6 +564,24 @@
     ctx.drawImage(staticLayer, 0, 0, width, height);
   }
 
+  // What an agent does while it has nothing to do: at the desk it switches every 40 s between a
+  // coffee, the newspaper, its phone and a stretch; in the lounge it has a coffee; a finished agent
+  // at its desk holds up its result.
+  const IDLE_ACTIVITIES = ['coffee', 'newspaper', 'phone', 'stretch'];
+  const ACTIVITY_MS = 40 * 1000;
+
+  function activityOf(character, now) {
+    if (!character.seated || character.isSubagent || character.isPlayer) return null;
+    const agent = agentByKey(character.key);
+    if (!agent) return null;
+    const inLounge = loungeSeatByKey.has(character.key);
+    if (agent.status === 'done') return inLounge ? 'coffee' : 'paper';
+    if (agent.status !== 'idle') return null;
+    if (inLounge) return 'coffee';
+    const slot = Math.floor(now / ACTIVITY_MS + character.phaseOffset);
+    return IDLE_ACTIVITIES[slot % IDLE_ACTIVITIES.length];
+  }
+
   function render(now) {
     const ratio = window.devicePixelRatio || 1;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -574,18 +592,22 @@
     drawStaticLayer(ratio);
     for (const desk of world.desks) {
       const agent = agentByKey(desk.ownerKey);
-      if (!agent || awayFromDesk(agent)) Sprites.drawEmptyCubicle(ctx, desk, world);
+      const away = !agent || awayFromDesk(agent);
+      const state = agent && agent.status === 'blocked' ? 'blocked' : away ? 'empty' : agent.status;
+      Sprites.drawCubicle(ctx, desk, world, state);
       if (agent && awayFromDesk(agent)) Sprites.drawDeskRug(ctx, desk, agent, loungeSeatByKey.has(agent.key));
     }
     for (const desk of world.desks) Sprites.drawDesk(ctx, desk, agentByKey(desk.ownerKey), now);
     Sprites.drawRoomSigns(ctx, world, scale);
 
+    for (const character of characters.values()) {
+      character.activity = activityOf(character, now);
+      const agent = !character.isSubagent && agentByKey(character.key);
+      character.atDesk = Boolean(agent && character.seated && !awayFromDesk(agent));
+    }
     const drawn = [...characters.values(), player].sort((a, b) => a.y - b.y);
     for (const character of drawn) Sprites.drawCharacter(ctx, character, now);
     for (const chair of world.chairs) if (Sprites.chairBackInFront(chair)) Sprites.drawChair(ctx, chair, 'back');
-    for (const character of characters.values()) {
-      if (character.status === 'idle' && !character.moving) Sprites.drawZzz(ctx, character, now);
-    }
     const placed = [];
     for (const character of [...drawn].sort((a, b) => Math.round(a.y) - Math.round(b.y) || a.x - b.x)) {
       if (character === player) continue; // the alien gets its marker above the head instead

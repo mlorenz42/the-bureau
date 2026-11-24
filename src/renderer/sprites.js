@@ -76,7 +76,11 @@
       }
     }
 
+    // what an idle or finished agent does while sitting (set by the office): some poses move the arms
+    const activity = seated ? character.activity : null;
+    const posedArms = activity ? posedArmsOf(activity, face) : [];
     for (const side of [-1, 1]) {
+      if (posedArms.includes(side)) continue;
       const swing = -side * phase * 1.5;
       ctx.fillStyle = shade(looks.shirt, -16);
       roundRect(ctx, side * 8.5 - 2, -4 + swing, 4, 9, 2);
@@ -116,8 +120,11 @@
       ctx.fill();
     }
 
-    if (looks.alien) drawAlienHead(ctx, looks, face, -13.5);
-    else drawHead(ctx, looks, face, -13.5);
+    if (activity) drawActivity(ctx, looks, activity, face, time, 'before-head');
+    const headY = -13.5 + (activity === 'coffee' && face === 'up' ? 1.5 : 0); // leaning back with a coffee
+    if (looks.alien) drawAlienHead(ctx, looks, face, headY);
+    else drawHead(ctx, looks, face, headY);
+    if (activity) drawActivity(ctx, looks, activity, face, time, 'after-head');
 
     if (looks.alien) {
       for (const side of [-1, 1]) {
@@ -150,7 +157,9 @@
     }
     ctx.restore();
 
-    if (character.status) drawStatusLight(ctx, px, figureY(py, -31 + lift), character.status, time);
+    const lightY = activity === 'paper' ? -46 : -31; // above the sheet a finished agent holds up
+    // at its own desk the cubicle shows the status; away from it the light above the head does
+    if (character.status && !character.atDesk) drawStatusLight(ctx, px, figureY(py, lightY + lift), character.status, time);
     if (character.isSubagent) drawBadge(ctx, px + 9 * FIGURE_SCALE, figureY(py, -23 + lift));
   }
 
@@ -444,7 +453,8 @@
     ctx.font = `${taskSize}px -apple-system, system-ui, sans-serif`;
     const taskLines = character.task && !compact ? wrapLines(ctx, character.task, maxWidth, 2) : [];
     const taskWidth = Math.max(0, ...taskLines.map((line) => ctx.measureText(line).width));
-    const width = Math.max(nameWidth + (character.status ? 12 / scale : 0), prefixWidth, taskWidth) + 10 / scale;
+    const showDot = Boolean(character.status && !character.atDesk);
+    const width = Math.max(nameWidth + (showDot ? 12 / scale : 0), prefixWidth, taskWidth) + 10 / scale;
     const height = prefixHeight + nameSize + 4 / scale + taskLines.length * (taskSize + lineGap);
     const box = { x: px - width / 2, w: width, h: height };
     const clashes = (y) => placed.some((other) => box.x < other.x + other.w && other.x < box.x + box.w && y < other.y + other.h && other.y < y + box.h);
@@ -465,8 +475,8 @@
     ctx.shadowColor = 'transparent';
 
     const dotRadius = 4 / scale;
-    const nameOffset = character.status ? dotRadius + 2 / scale : 0;
-    if (character.status) {
+    const nameOffset = showDot ? dotRadius + 2 / scale : 0;
+    if (showDot) {
       ctx.fillStyle = STATUS_COLORS[character.status] || STATUS_COLORS.unknown;
       ctx.beginPath();
       ctx.arc(px - nameWidth / 2 - 1 / scale, py + 1.5 / scale + prefixHeight + nameSize / 2, dotRadius, 0, Math.PI * 2);
@@ -487,11 +497,21 @@
     ctx.restore();
   }
 
-  // The floor of a cubicle nobody sits in right now (agent away, or a spare desk) turns paler,
-  // so empty places stand out from occupied ones. Desk, chair and rug are drawn on top.
+  // The floor of each cubicle shows how things stand there: tinted by the agent's status while it
+  // sits at its desk, orange while it waits for me (wherever it is), pale when nobody sits there.
+  // The team colour stays visible around the cubicles. Desk, chair and rug are drawn on top.
+  // nearly opaque, so the status reads the same on every team colour
+  const CUBICLE_TINTS = {
+    working: 'rgba(120,200,145,0.82)',
+    blocked: 'rgba(240,150,85,0.85)',
+    done: 'rgba(120,165,230,0.82)',
+    idle: 'rgba(150,158,172,0.82)',
+    empty: 'rgba(232,235,240,0.78)',
+  };
+
   // The cubicle runs from under its back wall down to the next back wall and from the left
   // divider to its own; it never leaves the team area.
-  function drawEmptyCubicle(ctx, desk, world) {
+  function drawCubicle(ctx, desk, world, state) {
     const top = desk.y - 1; // first row of the cubicle, where the back wall stands
     let x0 = (desk.x - 1) * TILE + 2;
     let x1 = (desk.x + 4) * TILE - 2;
@@ -508,7 +528,7 @@
       y1 = Math.min(y1, (area.y + area.h) * TILE - 8);
     }
     ctx.save();
-    ctx.fillStyle = 'rgba(255,255,255,0.38)';
+    ctx.fillStyle = CUBICLE_TINTS[state] || CUBICLE_TINTS.empty;
     ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
     ctx.restore();
     drawChair(ctx, desk.chair, 'seat');
@@ -654,40 +674,135 @@
     ctx.restore();
   }
 
-  // One outlined "z", drawn once at a large size; the floating z's are scaled copies of it.
-  // (Drawing text at a new font size every frame made the z's the most expensive part of a frame.)
-  const ZZZ_SIZE = 72;
-  const zSprite = (() => {
-    const sprite = document.createElement('canvas');
-    sprite.width = ZZZ_SIZE;
-    sprite.height = ZZZ_SIZE;
-    const c = sprite.getContext('2d');
-    c.font = `900 ${ZZZ_SIZE * 0.75}px -apple-system, system-ui, sans-serif`;
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
-    c.lineJoin = 'round';
-    c.strokeStyle = '#1e293b';
-    c.lineWidth = ZZZ_SIZE / 6;
-    c.strokeText('z', ZZZ_SIZE / 2, ZZZ_SIZE / 2);
-    c.fillStyle = '#e0f2fe';
-    c.fillText('z', ZZZ_SIZE / 2, ZZZ_SIZE / 2);
-    return sprite;
-  })();
+  // Poses of agents who have nothing to do. At the desk they face the monitor, so we see them from
+  // behind: things are held up beside or above the head where they show. In the lounge (facing any
+  // way) they only hold a coffee.
+  //   coffee    leaning back, mug raised beside the head, steam rising
+  //   newspaper a spread newspaper in front of the face, both hands at its edges
+  //   phone     a glowing phone held up beside the head
+  //   stretch   both arms up
+  //   paper     finished: a sheet with a green tick held up high ("look at my result")
+  function posedArmsOf(activity, face) {
+    if (face !== 'up') return [];
+    if (activity === 'coffee' || activity === 'phone') return [1];
+    return [-1, 1];
+  }
 
-  function drawZzz(ctx, character, time) {
-    const px = character.x * TILE + TILE / 2 + 10 * FIGURE_SCALE;
-    const py = figureY(character.y * TILE + TILE / 2, -22);
+  function drawArm(ctx, looks, x0, y0, x1, y1) {
     ctx.save();
-    for (let i = 0; i < 3; i++) {
-      const t = (time / 1800 + i / 3 + character.phaseOffset) % 1;
-      const size = (9 + t * 9) / 0.75; // font size 9–18, and the glyph fills 3/4 of the sprite
-      const alpha = t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85;
-      ctx.globalAlpha = Math.max(0, alpha);
-      const x = px + t * 14 + Math.sin(t * 6) * 2;
-      const y = py - t * 22;
-      ctx.drawImage(zSprite, x - size / 2, y - size / 2, size, size);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = OUTLINE;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+    ctx.strokeStyle = shade(looks.shirt, -16);
+    ctx.lineWidth = 3.6;
+    ctx.stroke();
+    ctx.fillStyle = looks.skin;
+    ctx.strokeStyle = OUTLINE;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x1, y1, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawMug(ctx, x, y, time) {
+    ctx.save();
+    ctx.fillStyle = '#f8fafc';
+    ctx.strokeStyle = OUTLINE;
+    ctx.lineWidth = 0.8;
+    roundRect(ctx, x - 2.5, y - 3, 5, 5.5, 1);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x + 3, y - 0.3, 1.5, -Math.PI / 2, Math.PI / 2);
+    ctx.stroke();
+    ctx.fillStyle = '#7c4a2a';
+    ctx.fillRect(x - 2, y - 2.6, 4, 1);
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.lineWidth = 0.8;
+    for (const offset of [-1, 1]) {
+      const t = (time / 900 + (offset + 1) * 0.3) % 1;
+      ctx.globalAlpha = 1 - t;
+      ctx.beginPath();
+      ctx.moveTo(x + offset, y - 4 - t * 2);
+      ctx.quadraticCurveTo(x + offset + 1.5, y - 6 - t * 3, x + offset, y - 8 - t * 4);
+      ctx.stroke();
     }
     ctx.restore();
+  }
+
+  function drawActivity(ctx, looks, activity, face, time, stage) {
+    if (face !== 'up') {
+      // lounge: a coffee in the hand on the side the agent faces
+      if (activity === 'coffee' && stage === 'after-head') drawMug(ctx, face === 'left' ? -8.5 : 8.5, 3.5, time);
+      return;
+    }
+    if (activity === 'stretch') {
+      if (stage !== 'before-head') return; // the head covers the arms' roots
+      const sway = Math.sin(time / 600) * 1.2;
+      drawArm(ctx, looks, -6.5, -4, -10 + sway, -28);
+      drawArm(ctx, looks, 6.5, -4, 10 + sway, -28);
+      return;
+    }
+    if (activity === 'newspaper') {
+      if (stage !== 'before-head') return;
+      ctx.save();
+      ctx.fillStyle = '#ece8df';
+      ctx.strokeStyle = OUTLINE;
+      ctx.lineWidth = 0.8;
+      ctx.fillRect(-14, -30, 28, 17);
+      ctx.strokeRect(-14, -30, 28, 17);
+      ctx.fillStyle = '#8b8678';
+      ctx.fillRect(-0.4, -30, 0.8, 17); // fold
+      for (const [x0, rows] of [[-12, 4], [2, 4]]) {
+        for (let i = 0; i < rows; i++) ctx.fillRect(x0, -27 + i * 3.2, 9.5 - (i % 2) * 2.5, 1);
+      }
+      ctx.restore();
+      drawArm(ctx, looks, -6, -3, -13, -18);
+      drawArm(ctx, looks, 6, -3, 13, -18);
+      return;
+    }
+    if (stage !== 'after-head') return;
+    if (activity === 'coffee') {
+      drawArm(ctx, looks, 6, -3, 10, -11);
+      drawMug(ctx, 11, -14, time);
+    } else if (activity === 'phone') {
+      drawArm(ctx, looks, 6, -3, 9.5, -10);
+      ctx.save();
+      ctx.fillStyle = '#111827';
+      roundRect(ctx, 8, -17, 4, 7, 1);
+      ctx.fill();
+      ctx.shadowColor = '#93c5fd';
+      ctx.shadowBlur = 4;
+      ctx.fillStyle = '#bfdbfe';
+      ctx.fillRect(8.7, -16.2, 2.6, 5.2);
+      ctx.restore();
+    } else if (activity === 'paper') {
+      drawArm(ctx, looks, -5, -4, -7, -27);
+      drawArm(ctx, looks, 5, -4, 7, -27);
+      ctx.save();
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = OUTLINE;
+      ctx.lineWidth = 0.8;
+      ctx.fillRect(-9, -42, 18, 15);
+      ctx.strokeRect(-9, -42, 18, 15);
+      ctx.fillStyle = '#cbd5e1';
+      for (let i = 0; i < 3; i++) ctx.fillRect(-7, -39.5 + i * 3, 7, 1);
+      ctx.strokeStyle = '#16a34a';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(1.5, -35);
+      ctx.lineTo(3.8, -32.5);
+      ctx.lineTo(7.5, -38);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   // the shortcuts, woven into rugs: [title, colour, lines of [key, action] pairs]
@@ -1459,6 +1574,33 @@
     ctx.restore();
   }
 
+  const SCREENSAVER_STARS = [[2, 2], [7, 8.5], [11, 3.5], [15, 9.5], [19, 1.5], [22, 6.5], [4, 6]];
+
+  // Screensaver of an idle agent: a starry night with a little UFO drifting across
+  function drawScreensaver(ctx, x, y, w, h, desk, time) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+    ctx.fillStyle = '#0b1230';
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    const shift = (desk.x * 5 + desk.y * 3) % 7; // each desk shows a slightly different sky
+    for (const [sx, sy] of SCREENSAVER_STARS) ctx.fillRect(x + ((sx + shift) % 24) + 0.5, y + sy, 0.9, 0.9);
+    const t = (time / 6000 + desk.x * 0.13) % 1;
+    const ux = x - 4 + t * (w + 8);
+    const uy = y + 5 + Math.sin(t * Math.PI * 4) * 1.5;
+    ctx.fillStyle = '#a7f3d0';
+    ctx.beginPath();
+    ctx.ellipse(ux, uy - 0.8, 1.4, 1.2, 0, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = '#cbd5e1';
+    ctx.beginPath();
+    ctx.ellipse(ux, uy, 3.2, 1, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   function drawDeskBody(ctx, desk, agent, time) {
     const x = desk.x * TILE;
     const y = desk.y * TILE;
@@ -1497,6 +1639,7 @@
     roundRect(ctx, x + 20, y + 2, 25, 11.5, 1.5);
     ctx.fill();
     ctx.restore();
+    if (agent && agent.status === 'idle') drawScreensaver(ctx, x + 20, y + 2, 25, 11.5, desk, time);
     ctx.fillStyle = 'rgba(255,255,255,0.08)';
     ctx.fillRect(x + 20, y + 2, 25, 4);
     if (agent && agent.status === 'working') {
@@ -1713,7 +1856,6 @@
     chairBackInFront,
     drawLabel,
     drawBubble,
-    drawZzz,
     drawFloorAndWalls,
     drawGlassWalls,
     drawTable,
@@ -1728,7 +1870,7 @@
     drawRoomSigns,
     setLegendCounts,
     drawDeskRug,
-    drawEmptyCubicle,
+    drawCubicle,
     drawPlayerMarker,
   };
 })();
