@@ -70,7 +70,8 @@ npm run hooks:install
   home folder. For sessions started in a project folder, add them to that project's settings:
   `python3 -I scripts/hooks.py install <project>/.claude/settings.local.json`.
 - New sessions pick them up; running sessions after a restart.
-- While The Bureau is not running, the hooks do nothing and do not slow Claude Code down.
+- The hooks take about a hundredth of a second and never hold up Claude Code; while The Bureau is
+  not running they simply do nothing.
 - If you stop using the app, remove them again with `npm run hooks:uninstall`.
 
 ## License
