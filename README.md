@@ -32,7 +32,7 @@ In Terminal, download the project into a folder of your choice and build the app
 ```bash
 git clone https://github.com/mlorenz42/the-bureau.git
 cd the-bureau
-npm install
+npm ci                # installs exactly the versions pinned in package-lock.json
 npm run install-app   # builds the app and copies it to /Applications/The Bureau.app
 ```
 

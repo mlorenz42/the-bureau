@@ -51,9 +51,12 @@ function createWindow() {
     window.maximize();
     window.show();
   });
-  window.webContents.on('console-message', (_event, level, message, line, source) => {
-    if (level >= 2) console.error(`[renderer] ${message} (${source}:${line})`);
+  window.webContents.on('console-message', ({ level, message, lineNumber, sourceId }) => {
+    if (level === 'warning' || level === 'error') console.error(`[renderer] ${message} (${sourceId}:${lineNumber})`);
   });
+  // The window only ever shows the app's own page: no navigation away, no new windows.
+  window.webContents.on('will-navigate', (event) => event.preventDefault());
+  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   if (process.env.OFFICE_SCREENSHOT) captureAndQuit(process.env.OFFICE_SCREENSHOT);
 }
 
@@ -219,6 +222,14 @@ function startHookServer() {
   const server = http.createServer((request, response) => {
     if (request.method !== 'POST') {
       response.writeHead(405).end();
+      return;
+    }
+    // Only the hook's curl call is accepted. A web page in a browser always sends an Origin header,
+    // and it cannot send application/json to another site without a preflight we never answer.
+    const json = (request.headers['content-type'] || '').startsWith('application/json');
+    if (request.headers.origin || !json) {
+      response.writeHead(403).end();
+      request.resume();
       return;
     }
     let body = '';
